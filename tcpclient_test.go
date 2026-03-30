@@ -5,6 +5,7 @@ package gos7
 // of the BSD license. See the LICENSE file for details.
 import (
 	"bytes"
+	"context"
 	"io"
 	"net"
 	"testing"
@@ -37,7 +38,7 @@ func TestTCPTransporter(t *testing.T) {
 	}
 	req := []byte{0, 1, 0, 17, 0, 2, 1, 2, 0, 1, 0, 17, 0, 2, 1, 2, 2} //lengh 17, > MinPduSize
 
-	client.tcpConnect() //assume tcp connect to test locally
+	client.tcpConnect(context.Background()) //assume tcp connect to test locally
 	rsp, err := client.Send(req)
 	if err != nil {
 		t.Fatal(err)
