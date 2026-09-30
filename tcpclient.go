@@ -62,6 +62,23 @@ func NewTCPClientHandlerWithConnectType(address string, rack int, slot int, conn
 	return h
 }
 
+// NewTCPClientHandlerWithTSAP allocates a new TCPClientHandler that connects
+// with an explicit local and remote TSAP instead of deriving the remote one
+// from rack and slot. Devices that are addressed by a configured TSAP pair
+// rather than a rack/slot position use this: a Siemens LOGO! 0BA7/0BA8, whose
+// TSAPs are set per connection in LOGO!Soft Comfort, or a CP configured with
+// its own TSAPs. The TSAPs go into the COTP connection request unchanged,
+// high byte first (0x1000 is "10.00" in Siemens notation).
+func NewTCPClientHandlerWithTSAP(address string, localTSAP, remoteTSAP uint16) *TCPClientHandler {
+	h := &TCPClientHandler{}
+	h.Address = address
+	h.Timeout = tcpTimeout
+	h.IdleTimeout = tcpIdleTimeout
+	h.ConnectionType = int(remoteTSAP >> 8)
+	h.setConnectionParameters(address, localTSAP, remoteTSAP)
+	return h
+}
+
 // TCPClient creator for a TCP client with address, rack and slot, implement from interface client
 func TCPClient(address string, rack int, slot int) Client {
 	handler := NewTCPClientHandler(address, rack, slot)
