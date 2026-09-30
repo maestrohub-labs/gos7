@@ -111,50 +111,47 @@ func (mb *client) AGWriteAB(start int, size int, buffer []byte) (err error) {
 	return mb.writeArea(s7areapa, 0, start, size, s7wlbyte, buffer)
 }
 
-//implement of the interface AGReadTM - read timer
+// AGReadTM reads amount timers from start. Each timer is its 2-byte word as
+// the CPU sends it (an S5TIME: BCD value and time base, big-endian), so
+// buffer holds 2*amount bytes.
 func (mb *client) AGReadTM(start int, amount int, buffer []byte) (err error) {
-	sbuffer := make([]byte, amount*2)
-	err = mb.readArea(s7areatm, 0, start, amount, s7wltimer, sbuffer)
-	if err == nil {
-		for c := 0; c < amount; c++ {
-			buffer[c] = byte(uint16(sbuffer[c*2+1])<<8 + uint16(sbuffer[c*2]))
-		}
+	if err := wordBuffer(amount, buffer); err != nil {
+		return err
 	}
-	return err
+	return mb.readArea(s7areatm, 0, start, amount, s7wltimer, buffer[:amount*2])
 }
 
-//implement of the interface AGWriteTM - write timer
+// AGWriteTM writes amount timers from start, 2 bytes each in buffer.
 func (mb *client) AGWriteTM(start int, amount int, buffer []byte) (err error) {
-	sbuffer := make([]byte, amount*2)
-	for c := 0; c < amount; c++ {
-		sbuffer[c*2+1] = byte((uint(buffer[c]) & uint(0xFF00)) >> 8)
-		sbuffer[c*2] = byte(buffer[c] & 0x00FF)
+	if err := wordBuffer(amount, buffer); err != nil {
+		return err
 	}
-	err = mb.writeArea(s7areatm, 0, start, amount, s7wltimer, sbuffer)
-	return err
+	return mb.writeArea(s7areatm, 0, start, amount, s7wltimer, buffer[:amount*2])
 }
 
-//implement of the interface AGReadCT - read counter
+// AGReadCT reads amount counters from start, 2 bytes each (a BCD word), so
+// buffer holds 2*amount bytes.
 func (mb *client) AGReadCT(start int, amount int, buffer []byte) (err error) {
-	sbuffer := make([]byte, amount*2)
-	err = mb.readArea(s7areact, 0, start, amount, s7wlcounter, sbuffer)
-	if err == nil {
-		for c := 0; c < amount; c++ {
-			buffer[c] = byte(uint(sbuffer[c*2+1])<<8 + uint(sbuffer[c*2]))
-		}
+	if err := wordBuffer(amount, buffer); err != nil {
+		return err
 	}
-	return err
+	return mb.readArea(s7areact, 0, start, amount, s7wlcounter, buffer[:amount*2])
 }
 
-//implement of the interface AGWriteCT - write counter
+// AGWriteCT writes amount counters from start, 2 bytes each in buffer.
 func (mb *client) AGWriteCT(start int, amount int, buffer []byte) (err error) {
-	sbuffer := make([]byte, amount*2)
-	for c := 0; c < amount; c++ {
-		sbuffer[c*2+1] = byte((uint(buffer[c]) & uint(0xFF00)) >> 8)
-		sbuffer[c*2] = byte(buffer[c] & 0x00FF)
+	if err := wordBuffer(amount, buffer); err != nil {
+		return err
 	}
-	err = mb.writeArea(s7areact, 0, start, amount, s7wlcounter, sbuffer)
-	return err
+	return mb.writeArea(s7areact, 0, start, amount, s7wlcounter, buffer[:amount*2])
+}
+
+// wordBuffer checks a timer or counter buffer holds 2 bytes per element.
+func wordBuffer(amount int, buffer []byte) error {
+	if amount < 1 || len(buffer) < amount*2 {
+		return fmt.Errorf("a timer or counter is 2 bytes: %d need a buffer of %d, got %d", amount, amount*2, len(buffer))
+	}
+	return nil
 }
 
 //read generic area, pass result into a buffer
