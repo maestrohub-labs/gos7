@@ -107,6 +107,11 @@ type tcpTransporter struct {
 	IdleTimeout time.Duration
 	// Transmission logger
 	Logger *log.Logger
+	// Dial, when set, opens the TCP connection instead of a net.Dialer
+	// bounded by Timeout. A caller that keeps the connection it returns can
+	// close it from outside, which ends a request blocked on it: the way to
+	// bound a request by a context, since Send takes none.
+	Dial func(ctx context.Context, network, address string) (net.Conn, error)
 
 	// TCP connection
 	mu           sync.Mutex
@@ -233,8 +238,12 @@ func (mb *tcpTransporter) tcpConnect(ctx context.Context) error {
 	mb.mu.Lock()
 	defer mb.mu.Unlock()
 	if mb.conn == nil {
-		dialer := net.Dialer{Timeout: mb.Timeout}
-		conn, err := dialer.DialContext(ctx, "tcp", mb.Address)
+		dial := mb.Dial
+		if dial == nil {
+			dialer := net.Dialer{Timeout: mb.Timeout}
+			dial = dialer.DialContext
+		}
+		conn, err := dial(ctx, "tcp", mb.Address)
 		if err != nil {
 			if conn != nil {
 				_ = conn.Close()

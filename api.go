@@ -34,6 +34,10 @@ type Client interface {
 	AGReadCT(start int, size int, buffer []byte) (err error)
 	//Write counter into PLC
 	AGWriteCT(start int, size int, buffer []byte) (err error)
+	//Read any area, the 200 family's SM, IEC counters and IEC timers included (area.go)
+	AGReadArea(area, dbNumber, start, amount, wordLen int, buffer []byte) (err error)
+	//Write any area but the IEC counters and timers (area.go)
+	AGWriteArea(area, dbNumber, start, amount, wordLen int, buffer []byte) (err error)
 	//multi read area
 	AGReadMulti(dataItems []S7DataItem, itemsCount int) (err error)
 	//multi write area
