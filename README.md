@@ -17,6 +17,7 @@ AG:
 *   Read/Write Timer (TM)  (tested)
 *   Read/Write Counter (CT) (tested)
 *   Multiple Read/Write Area (tested)
+*   Read/Write any area (`AGReadArea`/`AGWriteArea`), including the S7-200 family's system flags (SM) and reading its IEC counters and timers (tested)
 *   Get Block Info (tested)
 
 PG:

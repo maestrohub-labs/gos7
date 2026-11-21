@@ -159,13 +159,8 @@ func (mb *client) readArea(area int, dbNumber int, start int, amount int, wordLe
 	var address, numElements, maxElements, totElements, sizeRequested int
 	offset := 0
 	wordSize := 1
-	// Some adjustment
-	if area == s7areact {
-		wordLen = s7wlcounter
-	}
-	if area == s7areatm {
-		wordLen = s7wltimer
-	}
+	// Some adjustment: counters and timers are read in their own word length
+	wordLen = areaWordLen(area, wordLen)
 	// Calc Word size
 	wordSize = dataSizeByte(wordLen)
 	if wordSize == 0 {
@@ -174,12 +169,10 @@ func (mb *client) readArea(area int, dbNumber int, start int, amount int, wordLe
 
 	if wordLen == s7wlbit {
 		amount = 1 // Only 1 bit can be transferred at time
-	} else {
-		if wordLen != s7wlcounter && wordLen != s7wltimer {
-			amount = amount * wordSize
-			wordSize = 1
-			wordLen = s7wlbyte
-		}
+	} else if !elementWise(wordLen) {
+		amount = amount * wordSize
+		wordSize = 1
+		wordLen = s7wlbyte
 	}
 
 	tt, _ := interface{}(mb.transporter).(*TCPClientHandler)
@@ -206,7 +199,7 @@ func (mb *client) readArea(area int, dbNumber int, start int, amount int, wordLe
 		}
 
 		// Adjusts Start and word length
-		if wordLen == s7wlbit || wordLen == s7wlcounter || wordLen == s7wltimer {
+		if elementWise(wordLen) {
 			address = start
 			request.Data[22] = byte(wordLen)
 		} else {
@@ -230,7 +223,11 @@ func (mb *client) readArea(area int, dbNumber int, start int, amount int, wordLe
 				err = fmt.Errorf(ErrorText(errIsoInvalidDataSize)+"'%v'", len(response.Data))
 			} else {
 				if response.Data[21] != 0xFF {
-					err = fmt.Errorf(ErrorText(CPUError(uint(response.Data[21]))))
+					err = &ItemError{Code: response.Data[21]}
+				} else if size < 25+sizeRequested {
+					// Fewer bytes than were asked for: refused rather than
+					// read past the end of the answer.
+					err = fmt.Errorf(ErrorText(errIsoInvalidDataSize)+"'%v', want %v", size, 25+sizeRequested)
 				} else {
 					//copy response to buffer
 					copy(buffer[offset:offset+sizeRequested], response.Data[25:25+sizeRequested])
@@ -240,7 +237,9 @@ func (mb *client) readArea(area int, dbNumber int, start int, amount int, wordLe
 
 		}
 		totElements -= numElements
-		start += numElements * wordSize
+		// The next request starts after the elements read: a byte address
+		// moves by bytes, a counter or timer number by elements.
+		start += numElements
 	}
 	return
 }
@@ -257,13 +256,8 @@ func (mb *client) writeArea(area int, dbnumber int, start int, amount int, wordl
 	offset := 0
 	wordSize := 1
 
-	// Some adjustment
-	if area == s7areact {
-		wordlen = s7wlcounter
-	}
-	if area == s7areatm {
-		wordlen = s7wltimer
-	}
+	// Some adjustment: counters and timers are written in their own word length
+	wordlen = areaWordLen(area, wordlen)
 
 	// Calc Word size
 	wordSize = dataSizeByte(wordlen)
@@ -273,12 +267,10 @@ func (mb *client) writeArea(area int, dbnumber int, start int, amount int, wordl
 
 	if wordlen == s7wlbit {
 		amount = 1 // Only 1 bit can be transferred at time
-	} else {
-		if wordlen != s7wlcounter && wordlen != s7wltimer {
-			amount = amount * wordSize
-			wordSize = 1
-			wordlen = s7wlbyte
-		}
+	} else if !elementWise(wordlen) {
+		amount = amount * wordSize
+		wordSize = 1
+		wordlen = s7wlbyte
 	}
 	tt, _ := interface{}(mb.transporter).(*TCPClientHandler)
 	maxElements = (tt.PDULength - 35) / wordSize // 35 = Reply telegram header
@@ -312,7 +304,7 @@ func (mb *client) writeArea(area int, dbnumber int, start int, amount int, wordl
 			//SetWordAt(request.Data, 25, uint16(dbnumber))
 		}
 		// Adjusts start and word length
-		if wordlen == s7wlbit || wordlen == s7wlcounter || wordlen == s7wltimer {
+		if elementWise(wordlen) {
 			address = start
 			length = dataSize
 			request.Data[22] = byte(wordlen)
@@ -355,7 +347,7 @@ func (mb *client) writeArea(area int, dbnumber int, start int, amount int, wordl
 		if err == nil {
 			if length = len(response.Data); length == 22 {
 				if response.Data[21] != byte(0xFF) {
-					err = fmt.Errorf(ErrorText(CPUError(uint(response.Data[21]))))
+					err = &ItemError{Code: response.Data[21]}
 				}
 			} else {
 				err = fmt.Errorf(ErrorText(errIsoInvalidPDU))
@@ -364,7 +356,7 @@ func (mb *client) writeArea(area int, dbnumber int, start int, amount int, wordl
 		}
 		offset += dataSize
 		totElements -= numElements
-		start += numElements * wordSize
+		start += numElements // as in readArea
 	}
 	return
 }
@@ -523,6 +515,10 @@ func dataSizeByte(wordLength int) int {
 		return 2
 	case s7wltimer:
 		return 2
+	case WLIECCounter:
+		return 3
+	case WLIECTimer:
+		return 5
 	case s7wldword:
 		return 4
 	case s7wldint:
