@@ -7,7 +7,10 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log"
 	"net"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -48,7 +51,52 @@ func TestTCPTransporter(t *testing.T) {
 		t.Fatalf("unexpected response: %x", rsp)
 	}
 	time.Sleep(150 * time.Millisecond)
-	if client.conn != nil {
-		t.Fatalf("connection is not closed: %+v", client.conn)
+	client.mu.Lock() // the idle timer closes the connection under mu
+	conn := client.conn
+	client.mu.Unlock()
+	if conn != nil {
+		t.Fatalf("connection is not closed: %+v", conn)
+	}
+}
+
+// A failed receive is reported through the transporter's own Logger only:
+// with none set, nothing reaches the process's standard logger (a caller
+// that closes the connection on purpose to end a request would otherwise
+// print a line on every interrupt).
+func TestTCPTransporter_AFailedReceiveLogsOnlyThroughItsLogger(t *testing.T) {
+	var std bytes.Buffer
+	log.SetOutput(&std)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	for _, withLogger := range []bool{false, true} {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func() {
+			conn, err := ln.Accept()
+			if err == nil {
+				_ = conn.Close() // answer nothing: the receive fails with EOF
+			}
+		}()
+		var own bytes.Buffer
+		client := &tcpTransporter{Address: ln.Addr().String(), Timeout: 2 * time.Second}
+		if withLogger {
+			client.Logger = log.New(&own, "", 0)
+		}
+		if err := client.tcpConnect(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := client.Send([]byte{0, 1, 0, 17, 0, 2, 1, 2, 0, 1, 0, 17, 0, 2, 1, 2, 2}); err == nil {
+			t.Fatal("a closed peer must fail the receive")
+		}
+		_ = client.Close()
+		_ = ln.Close()
+		if withLogger && !strings.Contains(own.String(), "receive failed") {
+			t.Fatalf("the transporter's Logger did not get the failure: %q", own.String())
+		}
+	}
+	if std.Len() != 0 {
+		t.Fatalf("the standard logger got output: %q", std.String())
 	}
 }

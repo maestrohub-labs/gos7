@@ -1,9 +1,5 @@
 package gos7
 
-import (
-	"fmt"
-)
-
 // Copyright 2018 Trung Hieu Le. All rights reserved.
 // This software may be modified and distributed under the terms
 // of the BSD license. See the LICENSE file for details.
@@ -32,8 +28,6 @@ type S7BlocksList struct {
 //implement list block
 func (mb *client) PGListBlocks() (list S7BlocksList, err error) {
 	list.OBList, err = mb.pgBlockList(blockOB)
-	//debug
-	fmt.Printf("%v", list.DBList)
 	list.DBList, err = mb.pgBlockList(blockDB)
 	list.FCList, err = mb.pgBlockList(blockFC)
 	list.OBList, err = mb.pgBlockList(blockOB)
