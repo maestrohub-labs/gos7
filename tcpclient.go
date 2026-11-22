@@ -173,7 +173,7 @@ func (mb *tcpTransporter) Send(request []byte) (response []byte, err error) {
 	for !done && err == nil {
 		// Get TPKT (4 bytes)
 		if _, err = io.ReadFull(mb.conn, data[:4]); err != nil {
-			log.Printf("%T %+v", err, err)
+			mb.logf("s7: receive failed: %T %+v", err, err)
 			return
 		}
 		// Read length, ignore transaction & protocol id (4 bytes)
